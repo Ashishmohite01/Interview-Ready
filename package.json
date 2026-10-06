@@ -1,0 +1,13 @@
+{
+  "name": "interview-ready",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"npm --prefix Backend run dev\" \"npm --prefix Frontend run dev\"",
+    "dev:backend": "npm --prefix Backend run dev",
+    "dev:frontend": "npm --prefix Frontend run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
+  }
+}
