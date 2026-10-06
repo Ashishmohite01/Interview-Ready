@@ -6,8 +6,18 @@ const app = express()
 
 app.use(express.json())
 app.use(cookieParser())
+const allowedOrigins = [
+    "http://localhost:5173",
+    ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",").map(url => url.trim()) : [])
+]
+
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin) || !process.env.CLIENT_URL) {
+            return callback(null, true)
+        }
+        return callback(new Error(`CORS blocked for origin: ${origin}`))
+    },
     credentials: true
 }))
 

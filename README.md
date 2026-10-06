@@ -98,5 +98,30 @@ npm run dev
 
 ---
 
+## 🌐 Deployment Guide
+
+### Deploy Backend (e.g. Render / Railway)
+1. Create a new **Web Service** and connect this repository.
+2. Set Root Directory to `Backend`.
+3. Build Command: `npm install`
+4. Start Command: `npm start`
+5. Configure Environment Variables:
+   - `PORT=3000`
+   - `NODE_ENV=production`
+   - `CLIENT_URL=https://your-frontend-app.vercel.app`
+   - `JWT_SECRET=your_jwt_secret`
+   - `GOOGLE_GENAI_API_KEY=your_gemini_api_key`
+   - `MONGO_URI=your_mongodb_connection_string`
+
+### Deploy Frontend (e.g. Vercel)
+1. Create a new project on Vercel and connect this repository.
+2. Set Root Directory to `Frontend`.
+3. Framework Preset: **Vite**
+4. Configure Environment Variables:
+   - `VITE_API_URL=https://your-backend-app.onrender.com`
+5. Deploy!
+
+---
+
 ## 📄 License
 MIT
