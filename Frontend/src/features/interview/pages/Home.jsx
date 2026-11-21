@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react'
 import "../style/home.scss"
 import { useInterview } from '../hooks/useInterview.js'
+import { useAuth } from '../../auth/hooks/useAuth.js'
 import { useNavigate } from 'react-router'
 
 const Home = () => {
-
-    const { loading, generateReport, reports } = useInterview()
+    const { isGenerating, generateReport, reports } = useInterview()
+    const { user, handleLogout } = useAuth()
     const [ jobDescription, setJobDescription ] = useState("")
     const [ selfDescription, setSelfDescription ] = useState("")
     const [ selectedFile, setSelectedFile ] = useState(null)
@@ -39,8 +40,8 @@ const Home = () => {
         try {
             setError("")
             const data = await generateReport({
-                jobDescription,
-                selfDescription,
+                jobDescription: jobDescription.trim(),
+                selfDescription: selfDescription.trim(),
                 resumeFile: selectedFile
             })
 
@@ -54,16 +55,45 @@ const Home = () => {
         }
     }
 
-    if (loading) {
+    if (isGenerating) {
         return (
             <main className='loading-screen'>
-                <h1>Loading your interview plan...</h1>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ width: '48px', height: '48px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#e1034d', borderRadius: '50%', margin: '0 auto 1.5rem', animation: 'spin 0.8s linear infinite' }} />
+                    <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#f0f6fc', marginBottom: '0.5rem' }}>Analyzing Job &amp; Profile...</h1>
+                    <p style={{ color: '#8b949e', fontSize: '0.95rem' }}>Our AI is generating tailored questions, gap analysis, and a custom preparation roadmap (~30s).</p>
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
             </main>
         )
     }
 
     return (
         <div className='home-page'>
+            {/* Top Navigation Bar with User Info and Logout */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 2rem', borderBottom: '1px solid #21262d' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.25rem' }}>🎯</span>
+                    <span style={{ fontWeight: 700, fontSize: '1.1rem', color: '#f0f6fc', letterSpacing: '-0.02em' }}>Interview<span className='highlight'>Ready</span></span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    {user && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#21262d', border: '1px solid #30363d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, color: '#e6edf3', fontSize: '0.85rem' }}>
+                                {(user.username || user.email || 'U')[0].toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: '0.875rem', color: '#c9d1d9', fontWeight: 500 }}>{user.username || user.email}</span>
+                        </div>
+                    )}
+                    <button
+                        onClick={handleLogout}
+                        className='button outline-button'
+                        style={{ padding: '0.4rem 0.9rem', fontSize: '0.8rem', borderRadius: '0.5rem' }}
+                    >
+                        Logout
+                    </button>
+                </div>
+            </div>
 
             {/* Page Header */}
             <header className='page-header'>
@@ -93,7 +123,7 @@ const Home = () => {
                             onChange={(e) => { setJobDescription(e.target.value) }}
                             value={jobDescription}
                             className='panel__textarea'
-                            placeholder={`Paste the full job description here...\ne.g. 'Senior Frontend Engineer at Google requires proficiency in React, TypeScript, and large-scale system design...'`}
+                            placeholder={`Paste the full job description here...\ne.g. 'Senior Frontend Engineer requires proficiency in React, TypeScript, and large-scale system design...'`}
                             maxLength={5000}
                         />
                         <div className='char-counter'>{jobDescription.length} / 5000 chars</div>
@@ -175,10 +205,10 @@ const Home = () => {
                                 ) : (
                                     <>
                                         <span className='dropzone__icon'>
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16" /><line x1="12" y1="12" x2="12" y2="21" /><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /></svg>
+                                             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16" /><line x1="12" y1="12" x2="12" y2="21" /><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /></svg>
                                         </span>
                                         <p className='dropzone__title'>Click to upload or drag &amp; drop</p>
-                                        <p className='dropzone__subtitle'>PDF (Max 5MB)</p>
+                                        <p className='dropzone__subtitle'>PDF (Max 10MB)</p>
                                     </>
                                 )}
                             </div>
@@ -223,7 +253,7 @@ const Home = () => {
             </div>
 
             {/* Recent Reports List */}
-            {reports.length > 0 && (
+            {reports && reports.length > 0 && (
                 <section className='recent-reports'>
                     <h2>My Recent Interview Plans</h2>
                     <ul className='reports-list'>

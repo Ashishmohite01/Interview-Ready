@@ -1,13 +1,13 @@
 import { getAllInterviewReports, generateInterviewReport, getInterviewReportById, generateResumePdf } from "../services/interview.api"
-import { useContext, useEffect } from "react"
+import { useContext, useEffect, useState } from "react"
 import { InterviewContext } from "../interview.context"
 import { useParams } from "react-router"
 
-
 export const useInterview = () => {
-
     const context = useContext(InterviewContext)
     const { interviewId } = useParams()
+    const [ isGenerating, setIsGenerating ] = useState(false)
+    const [ isDownloadingPdf, setIsDownloadingPdf ] = useState(false)
 
     if (!context) {
         throw new Error("useInterview must be used within an InterviewProvider")
@@ -16,31 +16,38 @@ export const useInterview = () => {
     const { loading, setLoading, report, setReport, reports, setReports } = context
 
     const generateReport = async ({ jobDescription, selfDescription, resumeFile }) => {
+        setIsGenerating(true)
         setLoading(true)
         try {
             const response = await generateInterviewReport({ jobDescription, selfDescription, resumeFile })
             if (response?.interviewReport) {
                 setReport(response.interviewReport)
+                // Also add to reports list if available
+                setReports(prev => [ response.interviewReport, ...prev ])
             }
             return response?.interviewReport
         } catch (error) {
             console.error("Report generation failed:", error)
             throw error
         } finally {
+            setIsGenerating(false)
             setLoading(false)
         }
     }
 
-    const getReportById = async (interviewId) => {
+    const getReportById = async (id) => {
+        const targetId = id || interviewId
+        if (!targetId) return null
+
         setLoading(true)
         let response = null
         try {
-            response = await getInterviewReportById(interviewId)
+            response = await getInterviewReportById(targetId)
             if (response?.interviewReport) {
                 setReport(response.interviewReport)
             }
         } catch (error) {
-            console.log(error)
+            console.error("Failed to load interview report:", error)
         } finally {
             setLoading(false)
         }
@@ -48,7 +55,6 @@ export const useInterview = () => {
     }
 
     const getReports = async () => {
-        setLoading(true)
         let response = null
         try {
             response = await getAllInterviewReports()
@@ -56,30 +62,43 @@ export const useInterview = () => {
                 setReports(response.interviewReports)
             }
         } catch (error) {
-            console.log(error)
-        } finally {
-            setLoading(false)
+            console.error("Failed to load past reports:", error)
         }
-
         return response?.interviewReports
     }
 
-    const getResumePdf = async (interviewReportId) => {
-        setLoading(true)
-        let response = null
+    const downloadResumePdf = async (interviewReportId) => {
+        const targetId = interviewReportId || interviewId
+        if (!targetId) return
+
+        setIsDownloadingPdf(true)
         try {
-            response = await generateResumePdf({ interviewReportId })
-            const url = window.URL.createObjectURL(new Blob([ response ], { type: "application/pdf" }))
+            const blobData = await generateResumePdf({ interviewReportId: targetId })
+            const url = window.URL.createObjectURL(new Blob([ blobData ], { type: "application/pdf" }))
             const link = document.createElement("a")
             link.href = url
-            link.setAttribute("download", `resume_${interviewReportId}.pdf`)
+            link.setAttribute("download", `resume_${targetId}.pdf`)
             document.body.appendChild(link)
             link.click()
-        }
-        catch (error) {
-            console.log(error)
+            link.remove()
+            window.URL.revokeObjectURL(url)
+        } catch (error) {
+            console.error("Resume download error:", error)
+            let errMsg = "Failed to generate resume PDF. Please try again."
+            if (error.response?.data instanceof Blob) {
+                try {
+                    const text = await error.response.data.text()
+                    const json = JSON.parse(text)
+                    errMsg = json.message || errMsg
+                } catch {
+                    // Ignore parse error
+                }
+            } else if (error.response?.data?.message) {
+                errMsg = error.response.data.message
+            }
+            alert(errMsg)
         } finally {
-            setLoading(false)
+            setIsDownloadingPdf(false)
         }
     }
 
@@ -91,6 +110,15 @@ export const useInterview = () => {
         }
     }, [ interviewId ])
 
-    return { loading, report, reports, generateReport, getReportById, getReports, getResumePdf }
-
+    return {
+        loading,
+        isGenerating,
+        isDownloadingPdf,
+        report,
+        reports,
+        generateReport,
+        getReportById,
+        getReports,
+        getResumePdf: downloadResumePdf
+    }
 }

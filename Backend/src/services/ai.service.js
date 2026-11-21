@@ -15,7 +15,7 @@ const interviewReportSchema = z.object({
         answer: z.string().describe("How to answer this question, what points to cover, what approach to take etc.")
     })).describe("Technical questions that can be asked in the interview along with their intention and how to answer them"),
     behavioralQuestions: z.array(z.object({
-        question: z.string().describe("The technical question can be asked in the interview"),
+        question: z.string().describe("The behavioral question can be asked in the interview"),
         intention: z.string().describe("The intention of interviewer behind asking this question"),
         answer: z.string().describe("How to answer this question, what points to cover, what approach to take etc.")
     })).describe("Behavioral questions that can be asked in the interview along with their intention and how to answer them"),
@@ -32,11 +32,27 @@ const interviewReportSchema = z.object({
 })
 
 /**
- * Resilient caller with model fallback and automatic retry
+ * Format zod schema cleanly for Gemini API responseSchema
+ */
+function cleanJsonSchema(zodSchema) {
+    const raw = zodToJsonSchema(zodSchema, { target: "openApi3" })
+    delete raw.$schema
+    return raw
+}
+
+/**
+ * Resilient caller with official Gemini model fallbacks and automatic retry
  */
 async function generateContentWithFallback({ prompt, schema }) {
-    const models = [ "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.1-flash-lite" ]
+    const models = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-2.5-pro",
+        "gemini-1.5-pro"
+    ]
     let lastError = null
+    const responseSchema = cleanJsonSchema(schema)
 
     for (const model of models) {
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -46,14 +62,18 @@ async function generateContentWithFallback({ prompt, schema }) {
                     contents: prompt,
                     config: {
                         responseMimeType: "application/json",
-                        responseSchema: zodToJsonSchema(schema),
+                        responseSchema,
                     }
                 })
-                return JSON.parse(response.text)
+
+                if (response && response.text) {
+                    return JSON.parse(response.text)
+                }
             } catch (err) {
                 lastError = err
-                console.warn(`[AI Service] Attempt ${attempt + 1} with ${model} failed: ${err.message || err.status}. Retrying...`)
-                await new Promise(res => setTimeout(res, 1200))
+                console.warn(`[AI Service] Attempt ${attempt + 1} with model '${model}' failed: ${err.message || err.status}.`)
+                // Brief pause before retry
+                await new Promise(res => setTimeout(res, 1000))
             }
         }
     }
@@ -63,9 +83,9 @@ async function generateContentWithFallback({ prompt, schema }) {
 
 async function generateInterviewReport({ resume, selfDescription, jobDescription }) {
     const prompt = `Generate an interview report for a candidate with the following details:
-                        Resume: ${resume}
-                        Self Description: ${selfDescription}
-                        Job Description: ${jobDescription}
+Resume: ${resume || "Not provided"}
+Self Description: ${selfDescription || "Not provided"}
+Job Description: ${jobDescription}
 `
 
     return await generateContentWithFallback({
@@ -77,10 +97,24 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
 async function generatePdfFromHtml(htmlContent) {
     let browser
     try {
-        browser = await puppeteer.launch({
+        const launchOptions = {
             headless: true,
-            args: [ "--no-sandbox", "--disable-setuid-sandbox" ]
-        })
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-first-run",
+                "--no-zygote",
+                "--single-process"
+            ]
+        }
+
+        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+            launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+        }
+
+        browser = await puppeteer.launch(launchOptions)
         const page = await browser.newPage()
         await page.setContent(htmlContent, { waitUntil: "networkidle0" })
 
@@ -104,21 +138,18 @@ async function generatePdfFromHtml(htmlContent) {
 
 async function generateResumePdf({ resume, selfDescription, jobDescription }) {
     const resumePdfSchema = z.object({
-        html: z.string().describe("The HTML content of the resume which can be converted to PDF using any library like puppeteer")
+        html: z.string().describe("The HTML content of the resume which can be converted to PDF using puppeteer")
     })
 
-    const prompt = `Generate resume for a candidate with the following details:
-                        Resume: ${resume}
-                        Self Description: ${selfDescription}
-                        Job Description: ${jobDescription}
+    const prompt = `Generate a resume for a candidate with the following details:
+Resume: ${resume || "Not provided"}
+Self Description: ${selfDescription || "Not provided"}
+Job Description: ${jobDescription}
 
-                        the response should be a JSON object with a single field "html" which contains the HTML content of the resume which can be converted to PDF using any library like puppeteer.
-                        The resume should be tailored for the given job description and should highlight the candidate's strengths and relevant experience. The HTML content should be well-formatted and structured, making it easy to read and visually appealing.
-                        The content of resume should be not sound like it's generated by AI and should be as close as possible to a real human-written resume.
-                        you can highlight the content using some colors or different font styles but the overall design should be simple and professional.
-                        The content should be ATS friendly, i.e. it should be easily parsable by ATS systems without losing important information.
-                        The resume should not be so lengthy, it should ideally be 1-2 pages long when converted to PDF. Focus on quality rather than quantity and make sure to include all the relevant information that can increase the candidate's chances of getting an interview call for the given job description.
-                    `
+The response must be a JSON object with a single field "html" containing full HTML markup of the resume suitable for PDF generation.
+Tailor the resume for the given job description, highlighting candidate strengths and relevant experience.
+Format with clean CSS styling, professional layout, ATS-friendly structure, 1-2 pages long.
+`
 
     const jsonContent = await generateContentWithFallback({
         prompt,
@@ -126,7 +157,6 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
     })
 
     const pdfBuffer = await generatePdfFromHtml(jsonContent.html)
-
     return pdfBuffer
 }
 
